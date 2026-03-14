@@ -9,7 +9,6 @@ analysis tools live in `postProcess/`.
 ## Requirements
 
 - Basilisk with `qcc`
-- OpenMP-capable C toolchain for the default build flags
 - Python 3 for post-processing scripts
 - `ffmpeg` only if video assembly is needed
 
@@ -51,6 +50,10 @@ bash job.sh
 - `case.params` is the editable one-off run configuration at the repository root.
 - `sweep.params` defines the Cartesian sweep with `SWEEP_*` variables and the
   deterministic `CASE_START` / `CASE_END` range.
+- Default case numbering starts at `1000`, so the first generated cases are
+  `simulationCases/1000/`, `simulationCases/1001/`, and so on.
+- The default runtime is single-core: `OMP_NUM_THREADS=1` and the default
+  compile flags are `-Wall -O2` without `-fopenmp`.
 - Each run is materialized in `simulationCases/<CaseNo>/case.params`, alongside
   the compiled executable, `log`, `dump`, and `intermediate/snapshot-*` output.
 
@@ -74,7 +77,7 @@ Example frame render:
 
 ```bash
 python3 postProcess/VideoFullDomain.py \
-  --case-dir simulationCases/0 \
+  --case-dir simulationCases/1000 \
   --ldomain 4.0 \
   --tsnap 0.01 \
   --skip-video \
@@ -108,7 +111,6 @@ runSimulation.sh - compile-and-run entry point for one case
 simulationCases/ - Basilisk entry points and generated case directories
 └── bounce.c - main axisymmetric bouncing-drop solver
 src-local/ - project-local headers and shared parameter helpers
-├── adapt_wavelet_limited.h - limited refinement helper
 ├── params.h - typed runtime parameter accessors
 ├── params.sh - shared shell helpers for parameter files
 └── parse_params.h - low-level key=value parser for the solver

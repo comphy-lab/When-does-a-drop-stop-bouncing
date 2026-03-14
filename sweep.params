@@ -1,7 +1,7 @@
 # Parameter sweep configuration.
 # Space-separated SWEEP_* values generate the Cartesian product.
-CASE_START=1
-CASE_END=4
+CASE_START=1000
+CASE_END=1003
 SWEEP_We="1.0 2.0"
 SWEEP_Ohd="0.05 0.1"
 SWEEP_Ohs="1e-5"
@@ -10,6 +10,6 @@ SWEEP_Ldomain="4.0"
 SWEEP_MAXlevel="10"
 SWEEP_tmax="25"
 SWEEP_tsnap="0.01"
-OMP_NUM_THREADS=8
+OMP_NUM_THREADS=1
 QCC=qcc
-QCCFLAGS=-fopenmp -Wall -O2
+QCCFLAGS=-Wall -O2

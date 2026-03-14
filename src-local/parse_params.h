@@ -1,11 +1,3 @@
-#ifndef PARSE_PARAMS_H
-#define PARSE_PARAMS_H
-
-#include <ctype.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
 #ifndef PARAMS_MAX_ENTRIES
 #define PARAMS_MAX_ENTRIES 256
 #endif
@@ -27,17 +19,22 @@ static param_entry_t g_param_entries[PARAMS_MAX_ENTRIES];
 static int g_param_entry_count = 0;
 static char g_param_source[PARAMS_VALUE_SIZE] = "case.params";
 
+static int params_is_space (char c)
+{
+  return (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v');
+}
+
 static void params_trim_inplace (char * text)
 {
   if (!text)
     return;
 
   char * start = text;
-  while (*start && isspace((unsigned char) *start))
+  while (*start && params_is_space(*start))
     start++;
 
   char * end = start + strlen(start);
-  while (end > start && isspace((unsigned char) *(end - 1)))
+  while (end > start && params_is_space(*(end - 1)))
     end--;
 
   size_t length = (size_t) (end - start);
@@ -149,5 +146,3 @@ static const char * params_source_file (void)
 {
   return g_param_source;
 }
-
-#endif

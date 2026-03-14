@@ -38,18 +38,22 @@ fi
 
 CASE_DIR="$ROOT_DIR/simulationCases/$CASE_NO"
 mkdir -p "$CASE_DIR/intermediate"
+BUILD_DIR="$CASE_DIR/build"
+mkdir -p "$BUILD_DIR/simulationCases" "$BUILD_DIR/src-local"
 
 CASE_PARAMS_PATH="$CASE_DIR/case.params"
 cp "$PARAM_FILE" "$CASE_PARAMS_PATH"
+cp "$ROOT_DIR/simulationCases/bounce.c" "$BUILD_DIR/simulationCases/bounce.c"
+cp "$ROOT_DIR/src-local/"*.h "$BUILD_DIR/src-local/"
 
 SOLVER_NAME="$(get_param_value "$CASE_PARAMS_PATH" "SOLVER_NAME")"
 SOLVER_NAME="${SOLVER_NAME:-bounce}"
 QCC_BIN="$(get_param_value "$CASE_PARAMS_PATH" "QCC")"
 QCC_BIN="${QCC_BIN:-qcc}"
 QCCFLAGS_RAW="$(get_param_value "$CASE_PARAMS_PATH" "QCCFLAGS")"
-QCCFLAGS_RAW="${QCCFLAGS_RAW:--fopenmp -Wall -O2}"
+QCCFLAGS_RAW="${QCCFLAGS_RAW:--Wall -O2}"
 OMP_THREADS="$(get_param_value "$CASE_PARAMS_PATH" "OMP_NUM_THREADS")"
-OMP_THREADS="${OMP_THREADS:-8}"
+OMP_THREADS="${OMP_THREADS:-1}"
 
 if ! command -v "$QCC_BIN" >/dev/null 2>&1 && [[ -x "$ROOT_DIR/basilisk/src/qcc" ]]; then
   QCC_BIN="$ROOT_DIR/basilisk/src/qcc"
@@ -60,6 +64,6 @@ read -r -a QCCFLAGS <<< "$QCCFLAGS_RAW"
 (
   cd "$CASE_DIR"
   export OMP_NUM_THREADS="$OMP_THREADS"
-  "$QCC_BIN" "${QCCFLAGS[@]}" "$ROOT_DIR/simulationCases/bounce.c" -o "$SOLVER_NAME" -lm
+  "$QCC_BIN" "${QCCFLAGS[@]}" "build/simulationCases/bounce.c" -o "$SOLVER_NAME" -lm
   "./$SOLVER_NAME" "case.params"
 )

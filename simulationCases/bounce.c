@@ -8,12 +8,11 @@
 // 1 is drop
 #include "axi.h"
 #include "navier-stokes/centered.h"
-#define FILTERED
+#define FILTERED 1
 #include "two-phase.h"
 #include "navier-stokes/conserving.h"
 #include "tension.h"
 #include "reduced.h"
-#include "../src-local/adapt_wavelet_limited.h"
 #include "../src-local/params.h"
 
 // Error tolerances
@@ -70,11 +69,11 @@ int main(int argc, char const *argv[]) {
   sprintf (comm, "mkdir -p intermediate");
   system(comm);
 
-  /* For We > 1, it is useful to redefine the scales by choosing the impact velocity. 
-  Note that this non-dimensionalization is different from the one mentioned in the paper, which mentions Oh and Bo as the 
-  coefficients of viscous and gravitational terms respectively instead of Oh/sqrt(We) and Bo/We, respectively. 
-  Of course, these scales are inter-changeable and only differ by a factor of 
-  \sqrt{We}. Also, we run these cases by independently varying We, Oh and Bo. So, helpful to use them as control parameters. 
+  /* For We > 1, it is useful to redefine the scales by choosing the impact velocity.
+  Note that this non-dimensionalization is different from the one mentioned in the paper, which mentions Oh and Bo as the
+  coefficients of viscous and gravitational terms respectively instead of Oh/sqrt(We) and Bo/We, respectively.
+  Of course, these scales are inter-changeable and only differ by a factor of
+  \sqrt{We}. Also, we run these cases by independently varying We, Oh and Bo. So, helpful to use them as control parameters.
   */
 
   rho1 = 1.0; mu1 = Ohd/sqrt(We);
@@ -116,22 +115,14 @@ event adapt(i++){
     D2c[] = f[]*D2;
   }
   boundary((scalar *){D2c, KAPPA, omega});
-  adapt_wavelet_limited ((scalar *){f, KAPPA, u.x, u.y, D2c, omega},
+  adapt_wavelet ((scalar *){f, KAPPA, u.x, u.y, D2c, omega},
      (double[]){fErr, KErr, VelErr, VelErr, DissErr, OmegaErr},
-      refRegion, MINlevel);
-  unrefine(x>0.95*Ldomain);
-  // foreach(){
-  //   omega[] *= f[];
-  // }
-  // boundary((scalar *){KAPPA, omega});
-  // adapt_wavelet ((scalar *){f, KAPPA, u.x, u.y, omega},
-  //    (double[]){fErr, KErr, VelErr, VelErr, OmegaErr},
-  //     MAXlevel, MINlevel);
+     MAXlevel, MINlevel);
 }
 
 // Outputs
 // static
-event writingFiles (i = 0, t += tsnap; t <= tmax) {
+event writingFiles (t += tsnap) {
   p.nodump = false;
   dump (file = "dump");
   char nameOut[80];
@@ -139,8 +130,13 @@ event writingFiles (i = 0, t += tsnap; t <= tmax) {
   dump (file = nameOut);
 }
 
+event stopAtTmax (t = tmax) {
+  dump (file = "dump");
+  return 1;
+}
+
 event logWriting (i+=10) {
-  // boundary((scalar *){f, u.x, u.y, p}); 
+  // boundary((scalar *){f, u.x, u.y, p});
   double ke = 0.;
   foreach (reduction(+:ke)){
     ke += 2*pi*y*(0.5*rho(f[])*(sq(u.x[]) + sq(u.y[])))*sq(Delta);
