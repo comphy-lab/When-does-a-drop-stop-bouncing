@@ -13,7 +13,8 @@
 #include "navier-stokes/conserving.h"
 #include "tension.h"
 #include "reduced.h"
-#include "adapt_wavelet_limited.h"
+#include "../src-local/adapt_wavelet_limited.h"
+#include "../src-local/params.h"
 
 // Error tolerances
 #define fErr (1e-3)                                 // error tolerance in VOF
@@ -41,23 +42,25 @@ p[top] = dirichlet(0.0);
 
 int MAXlevel;
 double tmax, We, Ohd, Ohs, Bo, Ldomain;
+double tsnap;
 #define MINlevel 2                                            // maximum level
-#define tsnap (0.01)
 
 int main(int argc, char const *argv[]) {
-  if (argc < 8){
-    fprintf(ferr, "Lack of command line arguments. Check! Need %d more arguments\n",8-argc);
+  if (!params_init_from_argv(argc, argv))
     return 1;
-  }
-  MAXlevel = atoi(argv[1]);
-  tmax = atof(argv[2]);
-  We = atof(argv[3]); // We is 1 for 0.22 m/s <1250*0.22^2*0.001/0.06>
-  Ohd = atof(argv[4]); // <\mu/sqrt(1250*0.060*0.001)>
-  Ohs = atof(argv[5]); //\mu_r * Ohd
-  Bo = atof(argv[6]);
-  Ldomain = atof(argv[7]);
-  
-  fprintf(ferr, "Level %d tmax %g. We %g, Ohd %3.2e, Ohs %3.2e, Bo %g, Lo %g\n", MAXlevel, tmax, We, Ohd, Ohs, Bo, Ldomain);
+
+  MAXlevel = param_int_min("MAXlevel", 10, MINlevel);
+  tmax = param_double_min("tmax", 25., 0.);
+  tsnap = param_double_min("tsnap", 0.01, 1e-9);
+  We = param_double_min("We", 1.0, 1e-12);
+  Ohd = param_double_min("Ohd", 0.1, 0.);
+  Ohs = param_double_min("Ohs", 1e-5, 0.);
+  Bo = param_double("Bo", 0.1);
+  Ldomain = param_double_min("Ldomain", 4.0, 1e-6);
+
+  fprintf(ferr,
+          "params %s | Level %d tmax %g tsnap %g We %g Ohd %3.2e Ohs %3.2e Bo %g Lo %g\n",
+          params_source_file(), MAXlevel, tmax, tsnap, We, Ohd, Ohs, Bo, Ldomain);
 
   L0=Ldomain;
   X0=0.; Y0=0.;

@@ -1,0 +1,14 @@
+# Default runtime parameters for the bouncing-drop simulation.
+CaseNo=0
+MAXlevel=10
+tmax=25
+tsnap=0.01
+We=1.0
+Ohd=0.1
+Ohs=1e-5
+Bo=0.1
+Ldomain=4.0
+OMP_NUM_THREADS=8
+QCC=qcc
+QCCFLAGS=-fopenmp -Wall -O2
+SOLVER_NAME=bounce
