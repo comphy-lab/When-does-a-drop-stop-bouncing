@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import os
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
@@ -18,6 +19,8 @@ from matplotlib.collections import LineCollection
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 POSTPROCESS_DIR = PROJECT_ROOT / "postProcess"
 CACHE_ROOT = POSTPROCESS_DIR / ".video-cache"
+TARGET_VIDEO_SECONDS = 10.0
+MIN_VIDEO_FPS = 30
 
 matplotlib.rcParams["font.family"] = "serif"
 matplotlib.rcParams["text.usetex"] = True
@@ -35,9 +38,9 @@ def parse_args() -> argparse.Namespace:
         default="VideoFullDomain",
         help="Frame output directory relative to the case directory unless absolute.",
     )
-    parser.add_argument("--ldomain", type=float, required=True, help="Domain size used for plotting.")
+    parser.add_argument("--ldomain", type=float, default=8.0, help="Domain size used for plotting.")
     parser.add_argument("--tsnap", type=float, default=0.01, help="Snapshot cadence for plot titles.")
-    parser.add_argument("--fps", type=int, default=25, help="Video frame rate.")
+    parser.add_argument("--fps", type=int, default=None, help="Override automatic video frame rate (minimum 30).")
     parser.add_argument("--max-frames", type=int, default=None, help="Limit rendered frames for testing.")
     parser.add_argument("--skip-video", action="store_true", help="Only render frames; do not call ffmpeg.")
     parser.add_argument("--cpus", "--CPUs", dest="cpus", type=int, default=4, help="Worker processes to use.")
@@ -61,8 +64,11 @@ def precompile_get_helpers(snapshots: list[Path]) -> Path | None:
     if binary.exists() and binary.stat().st_mtime >= source.stat().st_mtime:
         return binary
 
-    cmd = ["qcc", "-O2", "-Wall", "-disable-dimensions", str(source), "-o", str(binary), "-lm"]
-    sp.run(cmd, check=True, cwd=PROJECT_ROOT)
+    # Basilisk's qcc can fail to emit its generated `*-cpp.c` file when the
+    # source is passed as an absolute path on this toolchain, even though the
+    # same helper compiles correctly from the source directory.
+    cmd = ["qcc", "-O2", "-Wall", "-disable-dimensions", source.name, "-o", binary.name, "-lm"]
+    sp.run(cmd, check=True, cwd=POSTPROCESS_DIR)
     return binary
 
 
@@ -80,8 +86,18 @@ def configure_worker_environment(cache_root: Path) -> None:
     os.environ["OMP_NUM_THREADS"] = "1"
 
 
+def project_relative(path: Path) -> str:
+    return os.path.relpath(path, PROJECT_ROOT)
+
+
 def getting_facets(helper_bin: Path, snapshot: Path) -> list[tuple[tuple[float, float], tuple[float, float]]]:
-    proc = sp.run([str(helper_bin), str(snapshot)], check=True, capture_output=True, text=True)
+    proc = sp.run(
+        [str(helper_bin), project_relative(snapshot)],
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=PROJECT_ROOT,
+    )
     lines = proc.stderr.splitlines()
     segs: list[tuple[tuple[float, float], tuple[float, float]]] = []
     skip = False
@@ -107,6 +123,20 @@ def getting_facets(helper_bin: Path, snapshot: Path) -> list[tuple[tuple[float, 
         )
         skip = True
     return segs
+
+
+def movie_output_path(case_dir: Path) -> Path:
+    return case_dir / f"{case_dir.name}.mp4"
+
+
+def choose_video_fps(frame_count: int, fps_override: int | None) -> int:
+    if frame_count <= 0:
+        raise ValueError("frame_count must be > 0")
+    if fps_override is not None:
+        if fps_override < MIN_VIDEO_FPS:
+            raise ValueError(f"--fps must be >= {MIN_VIDEO_FPS}")
+        return fps_override
+    return max(MIN_VIDEO_FPS, math.ceil(frame_count / TARGET_VIDEO_SECONDS))
 
 
 def render_single_snapshot(
@@ -161,6 +191,9 @@ def render_snapshots(
 
     CACHE_ROOT.mkdir(parents=True, exist_ok=True)
     tasks = list(enumerate(snapshots))
+    total_frames = len(tasks)
+    progress_interval = max(cpus, total_frames // 20 or 1)
+    last_reported = 0
     rendered: list[Path] = []
     for start in range(0, len(tasks), cpus):
         batch = tasks[start : start + cpus]
@@ -179,10 +212,18 @@ def render_snapshots(
                 for frame_index, snapshot in batch
             ]
             rendered.extend(future.result() for future in futures)
+        rendered_count = len(rendered)
+        if rendered_count == total_frames or rendered_count - last_reported >= progress_interval:
+            print(f"Rendered {rendered_count}/{total_frames} frame(s)...", flush=True)
+            last_reported = rendered_count
     return sorted(rendered)
 
 
-def assemble_video(output_dir: Path, fps: int) -> None:
+def count_rendered_frames(output_dir: Path) -> int:
+    return sum(1 for _ in output_dir.glob("frame_*.png"))
+
+
+def assemble_video(output_dir: Path, output_path: Path, fps: int) -> None:
     if shutil.which("ffmpeg") is None:
         raise RuntimeError("ffmpeg is required unless --skip-video is used")
     cmd = [
@@ -190,11 +231,19 @@ def assemble_video(output_dir: Path, fps: int) -> None:
         "-y",
         "-framerate",
         str(fps),
+        "-pattern_type",
+        "glob",
         "-i",
-        str(output_dir / "frame_%06d.png"),
+        str(output_dir / "*.png"),
+        "-vf",
+        "pad=ceil(iw/2)*2:ceil(ih/2)*2",
+        "-c:v",
+        "libx264",
+        "-r",
+        str(fps),
         "-pix_fmt",
         "yuv420p",
-        str(output_dir / "movie.mp4"),
+        str(output_path),
     ]
     sp.run(cmd, check=True)
 
@@ -203,6 +252,8 @@ def main() -> None:
     args = parse_args()
     if args.cpus <= 0:
         raise SystemExit("--cpus must be > 0")
+    if args.fps is not None and args.fps < MIN_VIDEO_FPS:
+        raise SystemExit(f"--fps must be >= {MIN_VIDEO_FPS}")
 
     case_dir = Path(args.case_dir).resolve()
     output_dir = Path(args.output_dir)
@@ -212,10 +263,22 @@ def main() -> None:
 
     snapshots = list_snapshots(case_dir, args.max_frames)
     helper_bin = precompile_get_helpers(snapshots)
-    rendered = render_snapshots(snapshots, args.cpus, helper_bin, output_dir, args.ldomain, args.tsnap)
+    rendered = render_snapshots(
+        snapshots,
+        args.cpus,
+        helper_bin,
+        output_dir,
+        args.ldomain,
+        args.tsnap,
+    )
     print(f"Rendered {len(rendered)} frame(s) into {output_dir}")
     if rendered and not args.skip_video:
-        assemble_video(output_dir, args.fps)
+        frame_count = count_rendered_frames(output_dir)
+        fps = choose_video_fps(frame_count, args.fps)
+        final_movie = movie_output_path(case_dir)
+        print(f"Encoding {frame_count} frame(s) into {final_movie} at {fps} fps...", flush=True)
+        assemble_video(output_dir, final_movie, fps)
+        print(f"Wrote {final_movie} from {frame_count} frame(s) at {fps} fps")
 
 
 if __name__ == "__main__":

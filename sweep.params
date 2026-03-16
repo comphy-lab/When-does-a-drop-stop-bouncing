@@ -9,7 +9,6 @@ SWEEP_Bo="0.1"
 SWEEP_Ldomain="4.0"
 SWEEP_MAXlevel="10"
 SWEEP_tmax="25"
-SWEEP_tsnap="0.01"
 OMP_NUM_THREADS=1
 QCC=qcc
 QCCFLAGS=-Wall -O2

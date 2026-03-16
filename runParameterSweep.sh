@@ -16,7 +16,7 @@ Expected keys in sweep params:
   SWEEP_We, SWEEP_Ohd, SWEEP_Ohs, SWEEP_Bo, SWEEP_Ldomain
 
 Optional sweep dimensions:
-  SWEEP_MAXlevel, SWEEP_tmax, SWEEP_tsnap
+  SWEEP_MAXlevel, SWEEP_tmax
 EOF
 }
 
@@ -90,9 +90,8 @@ read_optional_sweep() {
 
 read -r -a sweep_maxlevel <<< "$(read_optional_sweep "SWEEP_MAXlevel" "$(get_param_value "$ROOT_DIR/default.params" "MAXlevel")")"
 read -r -a sweep_tmax <<< "$(read_optional_sweep "SWEEP_tmax" "$(get_param_value "$ROOT_DIR/default.params" "tmax")")"
-read -r -a sweep_tsnap <<< "$(read_optional_sweep "SWEEP_tsnap" "$(get_param_value "$ROOT_DIR/default.params" "tsnap")")"
 
-expected_count=$(( ${#sweep_we[@]} * ${#sweep_ohd[@]} * ${#sweep_ohs[@]} * ${#sweep_bo[@]} * ${#sweep_ldomain[@]} * ${#sweep_maxlevel[@]} * ${#sweep_tmax[@]} * ${#sweep_tsnap[@]} ))
+expected_count=$(( ${#sweep_we[@]} * ${#sweep_ohd[@]} * ${#sweep_ohs[@]} * ${#sweep_bo[@]} * ${#sweep_ldomain[@]} * ${#sweep_maxlevel[@]} * ${#sweep_tmax[@]} ))
 case_span=$(( CASE_END - CASE_START + 1 ))
 
 if [[ "$expected_count" -ne "$case_span" ]]; then
@@ -115,29 +114,26 @@ for we in "${sweep_we[@]}"; do
         for ldomain in "${sweep_ldomain[@]}"; do
           for maxlevel in "${sweep_maxlevel[@]}"; do
             for tmax in "${sweep_tmax[@]}"; do
-              for tsnap in "${sweep_tsnap[@]}"; do
-                temp_params="$(mktemp "$ROOT_DIR/.case-${case_no}-XXXX.params")"
-                cp "$ROOT_DIR/default.params" "$temp_params"
-                set_param_in_file "$temp_params" "CaseNo" "$case_no"
-                set_param_in_file "$temp_params" "We" "$we"
-                set_param_in_file "$temp_params" "Ohd" "$ohd"
-                set_param_in_file "$temp_params" "Ohs" "$ohs"
-                set_param_in_file "$temp_params" "Bo" "$bo"
-                set_param_in_file "$temp_params" "Ldomain" "$ldomain"
-                set_param_in_file "$temp_params" "MAXlevel" "$maxlevel"
-                set_param_in_file "$temp_params" "tmax" "$tmax"
-                set_param_in_file "$temp_params" "tsnap" "$tsnap"
-                set_param_in_file "$temp_params" "QCC" "$QCC_BIN"
-                set_param_in_file "$temp_params" "QCCFLAGS" "$QCCFLAGS_RAW"
-                set_param_in_file "$temp_params" "OMP_NUM_THREADS" "$OMP_THREADS"
+              temp_params="$(mktemp "$ROOT_DIR/.case-${case_no}-XXXX.params")"
+              cp "$ROOT_DIR/default.params" "$temp_params"
+              set_param_in_file "$temp_params" "CaseNo" "$case_no"
+              set_param_in_file "$temp_params" "We" "$we"
+              set_param_in_file "$temp_params" "Ohd" "$ohd"
+              set_param_in_file "$temp_params" "Ohs" "$ohs"
+              set_param_in_file "$temp_params" "Bo" "$bo"
+              set_param_in_file "$temp_params" "Ldomain" "$ldomain"
+              set_param_in_file "$temp_params" "MAXlevel" "$maxlevel"
+              set_param_in_file "$temp_params" "tmax" "$tmax"
+              set_param_in_file "$temp_params" "QCC" "$QCC_BIN"
+              set_param_in_file "$temp_params" "QCCFLAGS" "$QCCFLAGS_RAW"
+              set_param_in_file "$temp_params" "OMP_NUM_THREADS" "$OMP_THREADS"
 
-                echo "CaseNo=$case_no We=$we Ohd=$ohd Ohs=$ohs Bo=$bo Ldomain=$ldomain MAXlevel=$maxlevel tmax=$tmax tsnap=$tsnap"
-                if [[ "$DRY_RUN" -eq 0 ]]; then
-                  bash "$ROOT_DIR/runSimulation.sh" "$temp_params"
-                fi
-                rm -f "$temp_params"
-                case_no=$((case_no + 1))
-              done
+              echo "CaseNo=$case_no We=$we Ohd=$ohd Ohs=$ohs Bo=$bo Ldomain=$ldomain MAXlevel=$maxlevel tmax=$tmax"
+              if [[ "$DRY_RUN" -eq 0 ]]; then
+                bash "$ROOT_DIR/runSimulation.sh" "$temp_params"
+              fi
+              rm -f "$temp_params"
+              case_no=$((case_no + 1))
             done
           done
         done

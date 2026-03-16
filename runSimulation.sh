@@ -12,7 +12,7 @@ Compile and run the Basilisk case defined by a parameter file.
 Defaults to ./case.params.
 
 The parameter file must define at least:
-  CaseNo, MAXlevel, tmax, tsnap, We, Ohd, Ohs, Bo, Ldomain
+  CaseNo, MAXlevel, tmax, We, Ohd, Ohs, Bo, Ldomain
 
 Optional keys:
   OMP_NUM_THREADS, QCC, QCCFLAGS, SOLVER_NAME
@@ -42,7 +42,14 @@ BUILD_DIR="$CASE_DIR/build"
 mkdir -p "$BUILD_DIR/simulationCases" "$BUILD_DIR/src-local"
 
 CASE_PARAMS_PATH="$CASE_DIR/case.params"
-cp "$PARAM_FILE" "$CASE_PARAMS_PATH"
+if [[ -f "$CASE_PARAMS_PATH" ]]; then
+  echo "Using existing case parameters: $CASE_PARAMS_PATH"
+elif [[ "$PARAM_FILE" != "$CASE_PARAMS_PATH" ]]; then
+  cp "$PARAM_FILE" "$CASE_PARAMS_PATH"
+else
+  echo "Using case parameters: $CASE_PARAMS_PATH"
+fi
+
 cp "$ROOT_DIR/simulationCases/bounce.c" "$BUILD_DIR/simulationCases/bounce.c"
 cp "$ROOT_DIR/src-local/"*.h "$BUILD_DIR/src-local/"
 
@@ -60,10 +67,11 @@ if ! command -v "$QCC_BIN" >/dev/null 2>&1 && [[ -x "$ROOT_DIR/basilisk/src/qcc"
 fi
 
 read -r -a QCCFLAGS <<< "$QCCFLAGS_RAW"
+INCLUDE_FLAGS=("-I$ROOT_DIR/src-local" "-I$BUILD_DIR/src-local")
 
 (
   cd "$CASE_DIR"
   export OMP_NUM_THREADS="$OMP_THREADS"
-  "$QCC_BIN" "${QCCFLAGS[@]}" "build/simulationCases/bounce.c" -o "$SOLVER_NAME" -lm
+  "$QCC_BIN" "${QCCFLAGS[@]}" "${INCLUDE_FLAGS[@]}" "build/simulationCases/bounce.c" -o "$SOLVER_NAME" -lm
   "./$SOLVER_NAME" "case.params"
 )

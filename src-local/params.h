@@ -83,18 +83,6 @@ static const char * param_string (const char * key, const char * fallback)
   return (raw && raw[0]) ? raw : fallback;
 }
 
-static double param_double_min (const char * key, double fallback, double min_value)
-{
-  double value = param_double(key, fallback);
-  if (value < min_value) {
-    fprintf(ferr,
-            "params warning: key '%s' in %s is below %g; using %g\n",
-            key, params_source_file(), min_value, fallback);
-    return fallback;
-  }
-  return value;
-}
-
 static int param_int_min (const char * key, int fallback, int min_value)
 {
   int value = param_int(key, fallback);

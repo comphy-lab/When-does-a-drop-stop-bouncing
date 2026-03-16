@@ -13,14 +13,13 @@
 #include "navier-stokes/conserving.h"
 #include "tension.h"
 #include "reduced.h"
-#include "../src-local/params.h"
+#include "params.h"
 
 // Error tolerances
 #define fErr (1e-3)                                 // error tolerance in VOF
 #define KErr (1e-6)                                 // error tolerance in KAPPA
 #define VelErr (1e-2)                            // error tolerances in velocity
-double DissErr = 1e-2;                            // error tolerances in dissipation
-#define OmegaErr (1e-2)                            // error tolerances in vorticity
+#define DissErr (1e-2)                            // error tolerances in dissipation
 
 // air-water
 #define Rho21 (1e-3)
@@ -41,7 +40,7 @@ p[top] = dirichlet(0.0);
 
 int MAXlevel;
 double tmax, We, Ohd, Ohs, Bo, Ldomain;
-double tsnap;
+double tsnap = 0.01;
 #define MINlevel 2                                            // maximum level
 
 int main(int argc, char const *argv[]) {
@@ -49,13 +48,12 @@ int main(int argc, char const *argv[]) {
     return 1;
 
   MAXlevel = param_int_min("MAXlevel", 10, MINlevel);
-  tmax = param_double_min("tmax", 25., 0.);
-  tsnap = param_double_min("tsnap", 0.01, 1e-9);
-  We = param_double_min("We", 1.0, 1e-12);
-  Ohd = param_double_min("Ohd", 0.1, 0.);
-  Ohs = param_double_min("Ohs", 1e-5, 0.);
+  tmax = param_double("tmax", 25.);
+  We = param_double("We", 1.0);
+  Ohd = param_double("Ohd", 0.1);
+  Ohs = param_double("Ohs", 1e-5);
   Bo = param_double("Bo", 0.1);
-  Ldomain = param_double_min("Ldomain", 4.0, 1e-6);
+  Ldomain = param_double("Ldomain", 4.0);
 
   fprintf(ferr,
           "params %s | Level %d tmax %g tsnap %g We %g Ohd %3.2e Ohs %3.2e Bo %g Lo %g\n",
@@ -84,7 +82,7 @@ int main(int argc, char const *argv[]) {
 }
 
 event init(t = 0){
-  if(!restore (file = "dump")){
+  if(!restore (file = "restart") && !restore (file = "dump")){
     refine((R2Drop(x,y) < 1.05) && (level < MAXlevel));
     fraction (f, 1. - R2Drop(x,y));
     foreach () {
@@ -95,18 +93,11 @@ event init(t = 0){
   }
 }
 
-int refRegion(double x, double y, double z){
-  return ((y < 3.0 && x < 0.001) ? MAXlevel+3: (y < 3.0 && x < 0.005) ? MAXlevel+2: (y < 3.0 && x < 0.01) ? MAXlevel+1: (y < 3.0 && x < 0.1) ? MAXlevel: y < 4.0 && x < 4.0 ? MAXlevel-1: y < 6.0 && x < 6.0 ? MAXlevel-2: y < 6.0 && x < 8.0 ? MAXlevel-3: y < 6.0 && x < 12.0 ? MAXlevel-4: MAXlevel-5);
-}
+scalar KAPPA[], D2c[];
 
 event adapt(i++){
-  scalar KAPPA[];
   curvature(f, KAPPA);
-  scalar omega[];
-  vorticity (u, omega);
-  scalar D2c[];
   foreach(){
-    omega[] *= f[];
     double D11 = (u.y[0,1] - u.y[0,-1])/(2*Delta);
     double D22 = (u.y[]/max(y,1e-20));
     double D33 = (u.x[1,0] - u.x[-1,0])/(2*Delta);
@@ -114,29 +105,27 @@ event adapt(i++){
     double D2 = (sq(D11)+sq(D22)+sq(D33)+2.0*sq(D13));
     D2c[] = f[]*D2;
   }
-  boundary((scalar *){D2c, KAPPA, omega});
-  adapt_wavelet ((scalar *){f, KAPPA, u.x, u.y, D2c, omega},
-     (double[]){fErr, KErr, VelErr, VelErr, DissErr, OmegaErr},
+  adapt_wavelet ((scalar *){f, KAPPA, u.x, u.y, D2c},
+     (double[]){fErr, KErr, VelErr, VelErr, DissErr},
      MAXlevel, MINlevel);
 }
 
 // Outputs
 // static
-event writingFiles (t += tsnap) {
-  p.nodump = false;
-  dump (file = "dump");
+event writingFiles (t = 0; t += tsnap; t <= tmax) {
+  // p.nodump = false; // uncomment this to dump pressure.
+  dump (file = "restart");
   char nameOut[80];
   sprintf (nameOut, "intermediate/snapshot-%5.4f", t);
   dump (file = nameOut);
 }
 
 event stopAtTmax (t = tmax) {
-  dump (file = "dump");
+  dump (file = "restart");
   return 1;
 }
 
 event logWriting (i+=10) {
-  // boundary((scalar *){f, u.x, u.y, p});
   double ke = 0.;
   foreach (reduction(+:ke)){
     ke += 2*pi*y*(0.5*rho(f[])*(sq(u.x[]) + sq(u.y[])))*sq(Delta);

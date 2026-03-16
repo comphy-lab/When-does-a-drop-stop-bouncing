@@ -55,17 +55,31 @@ bash job.sh
 - The default runtime is single-core: `OMP_NUM_THREADS=1` and the default
   compile flags are `-Wall -O2` without `-fopenmp`.
 - Each run is materialized in `simulationCases/<CaseNo>/case.params`, alongside
-  the compiled executable, `log`, `dump`, and `intermediate/snapshot-*` output.
+  the compiled executable, `log`, `restart`, and `intermediate/snapshot-*`
+  output.
+- Re-running `bash runSimulation.sh ...` for an existing `CaseNo` reuses
+  `simulationCases/<CaseNo>/case.params` instead of overwriting it, so
+  case-local edits such as lowering `MAXlevel` after a crash are preserved.
+- The solver resumes from `simulationCases/<CaseNo>/restart` when present and
+  falls back to the legacy `dump` checkpoint name for older cases.
 
 The Basilisk solver reads `key=value` parameters through
 `src-local/parse_params.h` and `src-local/params.h`, so the simulation no
 longer depends on fragile positional CLI arguments.
+`runSimulation.sh` adds both the repository `src-local/` directory and the
+per-case copied `build/src-local/` directory to the default `qcc` include path,
+so simulation sources can include project-local headers as `#include "params.h"`
+without relative `../src-local/...` paths.
 
 ## Post-Processing
 
 - `postProcess/VideoFullDomain.py` renders deterministic `frame_%06d.png`
-  outputs from `simulationCases/<CaseNo>/intermediate/` and supports
-  batched parallel rendering with `--cpus` / `--CPUs`.
+  outputs from `simulationCases/<CaseNo>/intermediate/`, supports
+  batched parallel rendering with `--cpus` / `--CPUs`, and writes a
+  case-named MP4 such as `simulationCases/1000/1000.mp4` after counting the
+  rendered frames in the output directory.
+  The default video fps is chosen to target a 10 s movie subject to a
+  minimum of 30 fps; `--fps` can override this with any value `>= 30`.
 - `postProcess/getEnergyScript.py` and `postProcess/getEpsNForce.py` are
   case-aware wrappers around the `getEnergyAxi` and `getEpsForce` helper
   binaries.

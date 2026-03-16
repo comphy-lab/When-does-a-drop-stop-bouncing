@@ -11,6 +11,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 POSTPROCESS_DIR = PROJECT_ROOT / "postProcess"
 
 
+def project_relative(path: Path) -> str:
+    return str(path.relative_to(PROJECT_ROOT) if path.is_absolute() else path)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("case_no", type=int)
@@ -37,8 +41,9 @@ def main() -> None:
             print(f"File {snapshot} not found!")
             continue
         subprocess.run(
-            [str(helper_bin), str(snapshot), str(output_path), str(args.ohd), str(args.we)],
+            [str(helper_bin), project_relative(snapshot), str(output_path), str(args.ohd), str(args.we)],
             check=True,
+            cwd=PROJECT_ROOT,
         )
         print(f"Done {ti + 1} of {args.max_frames}")
 
