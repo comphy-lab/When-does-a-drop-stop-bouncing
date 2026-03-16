@@ -1,14 +1,28 @@
-/* Title: Getting Energy
-# Author: Vatsal Sanjay
-# vatsalsanjay@gmail.com
-# Physics of Fluids
-# Last Update: Dec 07 2020
+/**
+# Axisymmetric Energy Extractor
+
+Offline Basilisk utility that restores a saved snapshot and computes energy,
+dissipation, center-of-mass, and contact diagnostics for the bouncing drop.
+
+## Output Columns
+
+- `ke`, `ke1`: total and liquid-only kinetic energy
+- `gpe`, `gpe1`: total and liquid-only gravitational potential energy
+- `se`: excess surface energy
+- `eps`, `eps1`: total and liquid-only viscous dissipation rates
+- `vcm`, `zcm`: liquid center-of-mass velocity and position
+- `Zmin`: near-wall interface location used as a contact proxy
 */
 #include "axi.h"
 #include "navier-stokes/centered.h"
 #include "fractions.h"
 
 trace
+/**
+### interface_energy()
+
+Integrates the axisymmetric interfacial area of the VOF field `c`.
+*/
 double interface_energy (scalar c){
   double se = 0.;
   foreach (reduction(+:se)){
@@ -27,8 +41,12 @@ double ke1, ke, se, gpe, gpe1, rho1, rho2, Rhor, Ohd, mu1, mu2, Ohs, eps1, eps, 
 
 char filename[80], nameEnergy[80];
 
+/**
+### main()
 
-
+Restores a snapshot, evaluates all diagnostic integrals, and appends one row to
+the requested output file.
+*/
 int main(int a, char const *arguments[]) {
   sprintf (filename, "%s", arguments[1]);
   sprintf(nameEnergy, "%s", arguments[2]);
@@ -70,9 +88,9 @@ int main(int a, char const *arguments[]) {
 	    f[-1,-1] + f[1,-1] + f[1,1] + f[-1,1])/16.;
   sf.prolongation = refine_bilinear;
   boundary ({sf});
-  /*
-  Do calculations start
-  */
+  /**
+  The smoothed field `sf` reduces staircase noise when volume-integrated
+  diagnostics are computed from the restored VOF field. */
   ke1 = 0., ke = 0., gpe = 0., gpe1 = 0., se = 0., eps1 = 0., eps = 0., vcm = 0., zcm = 0., wt = 0.;
 
   foreach (reduction(+:ke1), reduction(+:ke), reduction(+:gpe1), reduction(+:gpe), reduction(+:zcm), reduction(+:vcm), reduction(+:wt), reduction(+:eps), reduction(+:eps1)){
@@ -123,9 +141,7 @@ int main(int a, char const *arguments[]) {
     }
   }
   Zmin = temp;
-  /*
-  Do calculations end
-  */
+
   if (t == 0){
     fprintf(ferr, "Rhor %g, Ohd %3.2e, Ohs %3.2e, Bo %g\n", Rhor, Ohd, Ohs, Bo);
     fprintf(ferr, "t ke ke1 gpe gpe1 se eps eps1 vcm zcm Zmin\n");

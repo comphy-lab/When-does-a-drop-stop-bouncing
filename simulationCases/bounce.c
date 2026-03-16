@@ -1,11 +1,37 @@
-/* Title: Bouncing Droplet!
-# Author: Vatsal Sanjay
-# vatsalsanjay@gmail.com
-# Physics of Fluids
-# Last Update April 08 2022
+/**
+# Axisymmetric Bouncing-Drop Solver
+
+Primary Basilisk entry point for the axisymmetric impact simulations used in
+the "When does a drop stop bouncing?" study.
+
+## Physical Model
+
+- The liquid drop is phase `1` in the `two-phase.h` formulation.
+- The initial drop radius is the reference length scale.
+- Impact dynamics are controlled with `We`, `Ohd`, `Ohs`, and `Bo`.
+- Gravity acts in the negative axial direction through `G.x`.
+
+## Runtime Parameters
+
+The solver reads `key=value` settings through [`params.h`](../src-local/params.h),
+which keeps the command-line interface stable while allowing per-case parameter
+files under `simulationCases/<CaseNo>/`.
+
+## Output
+
+- `restart`: rolling checkpoint used for restarts
+- `intermediate/snapshot-*`: post-processing snapshots written every `tsnap`
+- `log`: kinetic-energy history used to detect when bouncing has effectively
+  stopped
 */
 
-// 1 is drop
+/**
+## Solver Stack
+
+The run uses the axisymmetric centered Navier-Stokes solver with two-phase VOF,
+surface tension, hydrostatic pressure reduction, and conservative momentum
+advection.
+*/
 #include "axi.h"
 #include "navier-stokes/centered.h"
 #define FILTERED 1
@@ -15,19 +41,37 @@
 #include "reduced.h"
 #include "params.h"
 
-// Error tolerances
+/**
+## Adaptation Controls
+
+Wavelet tolerances are tuned separately for:
+
+- `f`: interface reconstruction error
+- `KAPPA`: curvature error
+- `u`: velocity components
+- `D2c`: dissipation proxy used to retain thin high-shear regions
+*/
 #define fErr (1e-3)                                 // error tolerance in VOF
 #define KErr (1e-6)                                 // error tolerance in KAPPA
 #define VelErr (1e-2)                            // error tolerances in velocity
 #define DissErr (1e-2)                            // error tolerances in dissipation
 
-// air-water
+/**
+## Geometry and Material Ratios
+*/
 #define Rho21 (1e-3)
-// Calculations!
 #define Xdist (1.02)
 #define R2Drop(x,y) (sq(x - Xdist) + sq(y))
 
-// boundary conditions
+/**
+## Boundary Conditions
+
+The substrate is the left boundary in the axisymmetric $(x, y)$ frame:
+
+- no-slip on the wall (`u.t[left] = 0`)
+- open/outflow conditions on the far-field boundaries
+- `f[left] = 0` to keep the gas outside the wall
+*/
 u.t[left] = dirichlet(0.);
 // when viscosty ratio Ohd/Ohs is too high, consider using free slip for gas and no-slip for drop
 // u.t[left] = dirichlet(0.)*f[] + (1-f[])*neumann(0.0);
@@ -43,6 +87,12 @@ double tmax, We, Ohd, Ohs, Bo, Ldomain;
 double tsnap = 0.01;
 #define MINlevel 2                                            // maximum level
 
+/**
+### main()
+
+Reads the runtime parameter file, initializes the nondimensional material
+properties, creates the output directory, and launches the Basilisk event loop.
+*/
 int main(int argc, char const *argv[]) {
   if (!params_init_from_argv(argc, argv))
     return 1;
@@ -67,12 +117,12 @@ int main(int argc, char const *argv[]) {
   sprintf (comm, "mkdir -p intermediate");
   system(comm);
 
-  /* For We > 1, it is useful to redefine the scales by choosing the impact velocity.
-  Note that this non-dimensionalization is different from the one mentioned in the paper, which mentions Oh and Bo as the
-  coefficients of viscous and gravitational terms respectively instead of Oh/sqrt(We) and Bo/We, respectively.
-  Of course, these scales are inter-changeable and only differ by a factor of
-  \sqrt{We}. Also, we run these cases by independently varying We, Oh and Bo. So, helpful to use them as control parameters.
-  */
+  /**
+  For `We > 1`, the code uses the impact velocity to define the characteristic
+  scales. This makes the viscous and gravitational coefficients appear as
+  `Oh/sqrt(We)` and `Bo/We`. These are equivalent to the manuscript scaling up
+  to factors of `sqrt(We)`, but they are convenient when `We`, `Oh`, and `Bo`
+  are varied independently in parameter sweeps. */
 
   rho1 = 1.0; mu1 = Ohd/sqrt(We);
   rho2 = Rho21; mu2 = Ohs/sqrt(We);
@@ -81,6 +131,12 @@ int main(int argc, char const *argv[]) {
   run();
 }
 
+/**
+### init
+
+Initializes a spherical drop slightly above the wall, restores from a previous
+checkpoint when available, and seeds the impact velocity field.
+*/
 event init(t = 0){
   if(!restore (file = "restart") && !restore (file = "dump")){
     refine((R2Drop(x,y) < 1.05) && (level < MAXlevel));
@@ -95,6 +151,12 @@ event init(t = 0){
 
 scalar KAPPA[], D2c[];
 
+/**
+### adapt
+
+Builds a local strain-rate invariant `D2c` and adapts on interface, curvature,
+velocity, and dissipation features.
+*/
 event adapt(i++){
   curvature(f, KAPPA);
   foreach(){
@@ -110,8 +172,12 @@ event adapt(i++){
      MAXlevel, MINlevel);
 }
 
-// Outputs
-// static
+/**
+### writingFiles
+
+Writes a rolling `restart` checkpoint and a time-labelled snapshot used by the
+offline post-processing programs in `postProcess/`.
+*/
 event writingFiles (t = 0; t += tsnap; t <= tmax) {
   // p.nodump = false; // uncomment this to dump pressure.
   dump (file = "restart");
@@ -120,11 +186,23 @@ event writingFiles (t = 0; t += tsnap; t <= tmax) {
   dump (file = nameOut);
 }
 
+/**
+### stopAtTmax
+
+Stops the run cleanly once the requested physical time has been reached.
+*/
 event stopAtTmax (t = tmax) {
   dump (file = "restart");
   return 1;
 }
 
+/**
+### logWriting
+
+Accumulates total kinetic energy, appends it to `log`, mirrors the same
+information to `stderr`, and terminates early once the flow has effectively
+come to rest.
+*/
 event logWriting (i+=10) {
   double ke = 0.;
   foreach (reduction(+:ke)){

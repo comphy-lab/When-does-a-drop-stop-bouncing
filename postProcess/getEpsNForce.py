@@ -1,4 +1,15 @@
-"""Extract epsilon and wall-force histories from case snapshots."""
+"""
+# Epsilon and Wall-Force Driver
+
+Case-level Python wrapper around the compiled `getEpsForce` Basilisk helper.
+
+## Workflow
+
+1. Resolve a case directory.
+2. Walk the expected `snapshot-*` files at cadence `tsnap`.
+3. Invoke `getEpsForce` for each available snapshot.
+4. Append one diagnostic row per snapshot to `<case_no>_EpsForce.dat`.
+"""
 
 from __future__ import annotations
 
@@ -12,10 +23,12 @@ POSTPROCESS_DIR = PROJECT_ROOT / "postProcess"
 
 
 def project_relative(path: Path) -> str:
+    """Return a project-relative path for subprocess calls."""
     return str(path.relative_to(PROJECT_ROOT) if path.is_absolute() else path)
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse the CLI arguments for one case-level extraction run."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("case_no", type=int)
     parser.add_argument("ohd", type=float)
@@ -27,6 +40,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    """Iterate over snapshots and append dissipation/force diagnostics."""
     args = parse_args()
     case_dir = Path(args.case_dir).resolve() if args.case_dir else PROJECT_ROOT / "simulationCases" / str(args.case_no)
     output_path = case_dir / f"{args.case_no:04d}_EpsForce.dat"

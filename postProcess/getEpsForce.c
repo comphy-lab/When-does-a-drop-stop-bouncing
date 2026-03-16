@@ -1,8 +1,15 @@
-/* Title: Getting Energy
-# Author: Vatsal Sanjay
-# vatsalsanjay@gmail.com
-# Physics of Fluids
-# Last Update: Sep 06 2021
+/**
+# Wall-Force and Dissipation Extractor
+
+Restores a snapshot and evaluates liquid-only viscous dissipation together with
+simple wall-interaction diagnostics used to characterize impact and rebound.
+
+## Output Columns
+
+- `eps`: liquid-only viscous dissipation rate
+- `pforce`: net pressure force on the wall
+- `betaMax`, `vBeta`: highest interface point and its radial velocity
+- `Hmax`, `vH`: near-wall contact-line proxy and its axial velocity
 */
 #include "axi.h"
 #include "navier-stokes/centered.h"
@@ -15,6 +22,12 @@ double Ohd, mu1, eps1, We, pForce;
 
 char filename[80], nameEnergy[80];
 
+/**
+### main()
+
+Loads one snapshot, isolates the main connected liquid structure, and appends a
+single diagnostic line to the requested history file.
+*/
 int main(int a, char const *arguments[]) {
   sprintf (filename, "%s", arguments[1]);
   sprintf(nameEnergy, "%s", arguments[2]);
@@ -45,7 +58,9 @@ int main(int a, char const *arguments[]) {
   // fprintf(ferr, "Ohd %3.2e, We %g\n", Ohd, We);
   // return 1;
 
-  // tag all liquid parts starts
+  /**
+  Tag every connected liquid component and retain only the largest one. This
+  rejects detached satellite droplets in the diagnostic integrals below. */
   scalar d[];
   double threshold = 1e-4;
   foreach(){
@@ -69,8 +84,6 @@ int main(int a, char const *arguments[]) {
       MainPhase = i+1;
     }
   }
-  // tag all liquid parts ends
-
   scalar sf[];
   foreach()
     sf[] = (4.*f[] + 
@@ -78,9 +91,6 @@ int main(int a, char const *arguments[]) {
 	    f[-1,-1] + f[1,-1] + f[1,1] + f[-1,1])/16.;
   sf.prolongation = refine_bilinear;
   boundary ({sf});
-  /*
-  Do calculations start
-  */
   eps1 = 0., pForce = 0.;
 
   face vector s[];
@@ -138,10 +148,6 @@ int main(int a, char const *arguments[]) {
   }
 
   boundary((scalar *){f, u.x, u.y, p});
-
-  /*
-  Do calculations end
-  */
 
   FILE *fp;
   fp = fopen (nameEnergy, "a");

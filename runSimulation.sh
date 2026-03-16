@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
+# Compile and run one Basilisk case from a `key=value` parameter file.
+#
+# Responsibilities:
+# - resolve the case directory from `CaseNo`
+# - preserve per-case parameter files when rerunning an existing case
+# - copy the maintained solver/header sources into `simulationCases/<CaseNo>/build/`
+# - compile the solver with `qcc`
+# - execute the resulting binary inside the case directory
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -53,6 +61,7 @@ fi
 cp "$ROOT_DIR/simulationCases/bounce.c" "$BUILD_DIR/simulationCases/bounce.c"
 cp "$ROOT_DIR/src-local/"*.h "$BUILD_DIR/src-local/"
 
+# Resolve optional toolchain overrides from the case-local parameter file.
 SOLVER_NAME="$(get_param_value "$CASE_PARAMS_PATH" "SOLVER_NAME")"
 SOLVER_NAME="${SOLVER_NAME:-bounce}"
 QCC_BIN="$(get_param_value "$CASE_PARAMS_PATH" "QCC")"
@@ -69,6 +78,8 @@ fi
 read -r -a QCCFLAGS <<< "$QCCFLAGS_RAW"
 INCLUDE_FLAGS=("-I$ROOT_DIR/src-local" "-I$BUILD_DIR/src-local")
 
+# Build and execute from the materialized case directory so checkpoints and
+# outputs land next to the active `case.params`.
 (
   cd "$CASE_DIR"
   export OMP_NUM_THREADS="$OMP_THREADS"

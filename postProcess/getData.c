@@ -1,7 +1,16 @@
-/* Title: getting Data from simulation snapshot
-# Author: Vatsal Sanjay
-# vatsalsanjay@gmail.com
-# Physics of Fluids
+/**
+# Snapshot Field Sampler
+
+Restores a Basilisk snapshot and samples derived fields onto a uniform
+axisymmetric post-processing grid.
+
+## Sampled Fields
+
+- `D2c`: $\log_{10}$ of the strain-rate norm proxy
+- `vel`: velocity magnitude
+
+The data are written as plain-text rows to `stderr` for downstream Python
+visualization scripts.
 */
 
 #include "utils.h"
@@ -14,6 +23,15 @@ scalar f[], D2c[], vel[];
 vector u[];
 scalar * list = NULL;
 
+/**
+### main()
+
+#### Parameters
+
+- `arguments[1]`: Snapshot file
+- `arguments[2:5]`: Sampling window `(xmin, ymin, xmax, ymax)`
+- `arguments[6]`: Number of positive-r samples `ny`
+*/
 int main(int a, char const *arguments[])
 {
   sprintf (filename, "%s", arguments[1]);
@@ -24,9 +42,6 @@ int main(int a, char const *arguments[])
   list = list_add (list, D2c);
   list = list_add (list, vel);
 
-  /*
-  Actual run and codes!
-  */
   restore (file = filename);
 
   foreach() {

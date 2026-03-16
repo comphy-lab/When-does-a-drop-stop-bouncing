@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+# Generate a Cartesian sweep of case parameters and launch each case through
+# `runSimulation.sh`.
+#
+# The sweep specification lives in `sweep.params` and expands each `SWEEP_*`
+# key into a product set. Case numbering is assigned sequentially from
+# `CASE_START` to `CASE_END`.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -44,6 +50,7 @@ if [[ ! "$CASE_START" =~ ^[0-9]+$ || ! "$CASE_END" =~ ^[0-9]+$ || "$CASE_END" -l
 fi
 
 load_sweep_values() {
+  # Read one whitespace-delimited sweep dimension from the active sweep file.
   local key="$1"
   local raw
   raw="$(get_param_value "$SWEEP_FILE" "$key")"
@@ -61,6 +68,7 @@ load_sweep_values() {
 }
 
 load_sweep_array() {
+  # Populate a named bash array from one sweep dimension.
   local array_name="$1"
   local key="$2"
   local value
@@ -77,6 +85,8 @@ load_sweep_array sweep_bo "SWEEP_Bo"
 load_sweep_array sweep_ldomain "SWEEP_Ldomain"
 
 read_optional_sweep() {
+  # Fall back to the corresponding value in `default.params` when a sweep
+  # dimension is omitted.
   local key="$1"
   local fallback="$2"
   local raw
@@ -107,6 +117,8 @@ OMP_THREADS="$(get_param_value "$SWEEP_FILE" "OMP_NUM_THREADS")"
 OMP_THREADS="${OMP_THREADS:-$(get_param_value "$ROOT_DIR/default.params" "OMP_NUM_THREADS")}"
 
 case_no="$CASE_START"
+# Iterate over the full Cartesian product and materialize a temporary case
+# parameter file for each point in the sweep.
 for we in "${sweep_we[@]}"; do
   for ohd in "${sweep_ohd[@]}"; do
     for ohs in "${sweep_ohs[@]}"; do

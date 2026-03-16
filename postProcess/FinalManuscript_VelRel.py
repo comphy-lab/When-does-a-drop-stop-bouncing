@@ -1,7 +1,22 @@
-# Author: Vatsal Sanjay
-# vatsalsanjay@gmail.com
-# Physics of Fluids
-# Last updated: 19-Nov-2020
+"""
+# Legacy Manuscript Figure Renderer
+
+Legacy plotting script retained for reproducing an older whole-domain figure
+style used during manuscript development.
+
+## Status
+
+This script predates the newer `VideoFullDomain.py` pipeline. It is kept for
+reference and one-off reproduction of the original visual style, but it assumes
+the presence of the helper binaries `getFacet` and `getDataDropOnly` in the
+working directory.
+
+## Dependencies
+
+- `numpy`: array reshaping
+- `matplotlib`: static frame plotting
+- local helper binaries: `getFacet`, `getDataDropOnly`
+"""
 
 import numpy as np
 import os
@@ -16,7 +31,23 @@ matplotlib.rcParams['font.family'] = 'serif'
 matplotlib.rcParams['text.usetex'] = True
 # matplotlib.rcParams['text.latex.preamble'] = [r'']
 
+"""
+## Helper Extraction Routines
+"""
+
 def gettingFacets(filename):
+    """
+    Read interface facets from the external `getFacet` helper.
+
+    #### Args
+
+    - `filename`: Snapshot path passed through to `getFacet`.
+
+    #### Returns
+
+    - `list[tuple[tuple[float, float], tuple[float, float]]]`: Line segments in
+      the mirrored plotting plane.
+    """
     exe = ["./getFacet", filename]
     p = sp.Popen(exe, stdout=sp.PIPE, stderr=sp.PIPE)
     stdout, stderr = p.communicate()
@@ -43,6 +74,17 @@ def gettingFacets(filename):
     return segs
 
 def gettingfield(filename):
+    """
+    Sample plotting fields from the external `getDataDropOnly` helper.
+
+    #### Args
+
+    - `filename`: Snapshot path passed through to `getDataDropOnly`.
+
+    #### Returns
+
+    - `tuple`: `R, Z, D2, vel, nz, U, V` arrays reshaped for plotting.
+    """
     exe = ["./getDataDropOnly", filename, str(0), str(0), str(zmax), str(rmax), str(nr), str(Ohd), str(Ohs), str(We)]
     p = sp.Popen(exe, stdout=sp.PIPE, stderr=sp.PIPE)
     stdout, stderr = p.communicate()
@@ -78,7 +120,13 @@ def gettingfield(filename):
     V.resize((nz, nr))
 
     return R, Z, D2, vel, nz, U, V
-# ----------------------------------------------------------------------------------------------------------------------
+
+"""
+## Legacy Configuration
+
+These constants hard-code the manuscript-era sampling density, domain size, and
+output folder structure.
+"""
 
 nGFS = 27500
 Ldomain = 4
@@ -95,6 +143,13 @@ folder = 'VideoD2_v1'  # output folder
 
 if not os.path.isdir(folder):
     os.makedirs(folder)
+
+"""
+## Batch Frame Generation
+
+The main loop scans the expected snapshots and writes one PNG per time step
+when the target image is not already present.
+"""
 
 for ti in range(nGFS):
     t = 0.01*ti

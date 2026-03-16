@@ -2,6 +2,7 @@ CLAUDE.md
 .github/docs/
 .project_config
 .venv/
+.comphy-basilisk
 .comphy-basilisk/
 basilisk/
 simulationCases/[0-9]*/

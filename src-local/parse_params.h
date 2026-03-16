@@ -1,3 +1,18 @@
+/**
+# Low-Level Parameter Parser
+
+Shared header-only parser for `key=value` runtime configuration files.
+
+## Responsibilities
+
+- load a parameter file selected from `argv`
+- trim whitespace and strip inline `#` comments
+- store the last value seen for repeated keys
+- expose raw string lookups for the typed accessors in [`params.h`](params.h)
+
+This header intentionally keeps the implementation small so simulation sources
+can include it directly without linking an extra object file.
+*/
 #ifndef PARAMS_MAX_ENTRIES
 #define PARAMS_MAX_ENTRIES 256
 #endif
@@ -19,11 +34,22 @@ static param_entry_t g_param_entries[PARAMS_MAX_ENTRIES];
 static int g_param_entry_count = 0;
 static char g_param_source[PARAMS_VALUE_SIZE] = "case.params";
 
+/**
+### params_is_space()
+
+Returns non-zero when `c` is any ASCII whitespace character handled by the
+parser.
+*/
 static int params_is_space (char c)
 {
   return (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v');
 }
 
+/**
+### params_trim_inplace()
+
+Removes leading and trailing whitespace from `text` in place.
+*/
 static void params_trim_inplace (char * text)
 {
   if (!text)
@@ -43,6 +69,11 @@ static void params_trim_inplace (char * text)
   text[length] = '\0';
 }
 
+/**
+### params_strip_inline_comment()
+
+Truncates `text` at the first `#` marker and trims any surrounding whitespace.
+*/
 static void params_strip_inline_comment (char * text)
 {
   if (!text)
@@ -57,6 +88,11 @@ static void params_strip_inline_comment (char * text)
   params_trim_inplace(text);
 }
 
+/**
+### params_store_entry()
+
+Stores or updates a parsed `key=value` pair in the static parameter table.
+*/
 static void params_store_entry (const char * key, const char * value)
 {
   for (int i = 0; i < g_param_entry_count; i++) {
@@ -77,12 +113,27 @@ static void params_store_entry (const char * key, const char * value)
   g_param_entry_count++;
 }
 
+/**
+### params_reset()
+
+Clears all stored entries before loading a new parameter file.
+*/
 static void params_reset (void)
 {
   g_param_entry_count = 0;
   g_param_source[0] = '\0';
 }
 
+/**
+### params_load_file()
+
+Parses `filename` into the static lookup table.
+
+#### Returns
+
+- `1` when the file was opened and parsed
+- `0` when the file could not be opened
+*/
 static int params_load_file (const char * filename)
 {
   FILE * fp = fopen(filename, "r");
@@ -128,12 +179,23 @@ static int params_load_file (const char * filename)
   return 1;
 }
 
+/**
+### params_init_from_argv()
+
+Loads the parameter file provided as `argv[1]`, or falls back to
+`case.params` when no explicit filename is passed.
+*/
 static int params_init_from_argv (int argc, char const * argv[])
 {
   const char * filename = (argc > 1 && argv[1] && argv[1][0]) ? argv[1] : "case.params";
   return params_load_file(filename);
 }
 
+/**
+### params_get_raw()
+
+Looks up the raw string value associated with `key`.
+*/
 static const char * params_get_raw (const char * key)
 {
   for (int i = 0; i < g_param_entry_count; i++)
@@ -142,6 +204,11 @@ static const char * params_get_raw (const char * key)
   return NULL;
 }
 
+/**
+### params_source_file()
+
+Returns the name of the parameter file most recently loaded.
+*/
 static const char * params_source_file (void)
 {
   return g_param_source;

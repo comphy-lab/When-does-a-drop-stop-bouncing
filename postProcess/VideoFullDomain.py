@@ -1,4 +1,23 @@
-"""Render whole-domain D2/velocity snapshots into deterministic movie frames."""
+"""
+# Whole-Domain Video Renderer
+
+Render mirrored full-domain movies from axisymmetric Basilisk snapshots.
+
+## Workflow
+
+1. Discover `snapshot-*` dumps under a case directory.
+2. Compile the Basilisk helpers `getFacet.c` and `getData.c` on demand.
+3. Sample the positive-r half-domain fields and mirror them across the axis.
+4. Draw `D2` on the left half and `|u|` on the right half.
+5. Optionally encode the rendered frames into an MP4 with `ffmpeg`.
+
+## Dependencies
+
+- `numpy`: grid reshaping and masking
+- `matplotlib`: frame rendering
+- `qcc`: helper compilation
+- `ffmpeg`: optional MP4 assembly
+"""
 
 from __future__ import annotations
 
@@ -19,6 +38,13 @@ from matplotlib.collections import LineCollection
 from matplotlib.ticker import StrMethodFormatter
 import numpy as np
 
+"""
+## Paths and Rendering Defaults
+
+Centralize repository-relative paths and rendering constants so the CLI and the
+worker processes agree on helper locations and video pacing.
+"""
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 POSTPROCESS_DIR = PROJECT_ROOT / "postProcess"
 CACHE_ROOT = POSTPROCESS_DIR / ".video-cache"
@@ -31,6 +57,17 @@ matplotlib.rcParams["mathtext.fontset"] = "cm"
 
 @dataclass(frozen=True)
 class FieldData:
+    """
+    Sampled half-domain fields parsed from `getData`.
+
+    #### Attributes
+
+    - `z`: Unique axial coordinates.
+    - `r`: Unique positive-r coordinates.
+    - `d2`: Masked `D2` field on the half-domain sampling grid.
+    - `vel`: Masked velocity-magnitude field on the same grid.
+    """
+
     z: np.ndarray
     r: np.ndarray
     d2: np.ma.MaskedArray
@@ -38,6 +75,13 @@ class FieldData:
 
 
 def parse_args() -> argparse.Namespace:
+    """
+    Parse command-line options for frame rendering and video assembly.
+
+    #### Returns
+
+    - `argparse.Namespace`: Parsed CLI arguments.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--case-dir",
@@ -66,6 +110,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def list_snapshots(case_dir: Path, max_frames: int | None) -> list[Path]:
+    """Return sorted snapshot files, optionally truncated to `max_frames`."""
     snapshots = sorted((case_dir / "intermediate").glob("snapshot-*"))
     if max_frames is not None:
         snapshots = snapshots[:max_frames]
@@ -73,6 +118,7 @@ def list_snapshots(case_dir: Path, max_frames: int | None) -> list[Path]:
 
 
 def snapshot_time(snapshot: Path, tsnap_fallback: float, frame_index: int) -> float:
+    """Recover physical time from the snapshot filename or fall back to `tsnap`."""
     suffix = snapshot.name.split("snapshot-", 1)[-1]
     try:
         return float(suffix)
@@ -81,11 +127,19 @@ def snapshot_time(snapshot: Path, tsnap_fallback: float, frame_index: int) -> fl
 
 
 def clean_existing_frames(output_dir: Path) -> None:
+    """Delete stale `frame_*.png` files before a fresh render pass."""
     for old_png in output_dir.glob("frame_*.png"):
         old_png.unlink()
 
 
 def compile_helper(source_name: str, binary_name: str) -> Path:
+    """
+    Compile a Basilisk helper if the binary is missing or older than the source.
+
+    #### Returns
+
+    - `Path`: Path to the ready-to-run helper binary.
+    """
     source = POSTPROCESS_DIR / source_name
     binary = POSTPROCESS_DIR / binary_name
     if binary.exists() and binary.stat().st_mtime >= source.stat().st_mtime:
@@ -97,12 +151,14 @@ def compile_helper(source_name: str, binary_name: str) -> Path:
 
 
 def precompile_get_helpers(snapshots: list[Path]) -> tuple[Path | None, Path | None]:
+    """Compile `getFacet` and `getData` only when snapshots are present."""
     if not snapshots:
         return None, None
     return compile_helper("getFacet.c", "getFacet"), compile_helper("getData.c", "getData")
 
 
 def configure_worker_environment(cache_root: Path) -> None:
+    """Create per-process Matplotlib and TeX cache directories for worker safety."""
     worker_root = cache_root / f"worker-{os.getpid()}"
     mpl_dir = worker_root / "mpl"
     texmfvar = worker_root / "texmf-var"
@@ -117,15 +173,18 @@ def configure_worker_environment(cache_root: Path) -> None:
 
 
 def project_relative(path: Path) -> str:
+    """Express `path` relative to `PROJECT_ROOT` for subprocess calls."""
     return os.path.relpath(path, PROJECT_ROOT)
 
 
 def run_helper(command: list[str]) -> str:
+    """Execute a helper binary from the project root and return merged text output."""
     proc = sp.run(command, cwd=PROJECT_ROOT, check=True, capture_output=True, text=True)
     return f"{proc.stdout}{proc.stderr}"
 
 
 def parse_facet_segments(raw: str) -> np.ndarray:
+    """Convert raw facet-point text into `LineCollection`-ready segment pairs."""
     points: list[list[float]] = []
     for line in raw.splitlines():
         parts = line.split()
@@ -144,12 +203,14 @@ def parse_facet_segments(raw: str) -> np.ndarray:
 
 
 def map_segments_to_rz(segments: np.ndarray) -> np.ndarray:
+    """Swap Basilisk's `(z, r)` output ordering into plotting `(r, z)` ordering."""
     if len(segments) == 0:
         return segments
     return segments[..., [1, 0]].copy()
 
 
 def mirror_segments_about_axis(segments_rz: np.ndarray) -> np.ndarray:
+    """Mirror positive-r interface segments across the symmetry axis."""
     if len(segments_rz) == 0:
         return segments_rz
     mirrored = segments_rz.copy()
@@ -158,11 +219,19 @@ def mirror_segments_about_axis(segments_rz: np.ndarray) -> np.ndarray:
 
 
 def get_facets(helper_bin: Path, snapshot: Path) -> np.ndarray:
+    """Return mirrored interface segments for a single snapshot."""
     raw = run_helper([str(helper_bin), project_relative(snapshot)])
     return mirror_segments_about_axis(map_segments_to_rz(parse_facet_segments(raw)))
 
 
 def get_field_data(helper_bin: Path, snapshot: Path, ldomain: float, ny: int) -> FieldData:
+    """
+    Sample `D2` and `|u|` from one snapshot onto a uniform half-domain grid.
+
+    #### Returns
+
+    - `FieldData`: Parsed masked arrays and the corresponding coordinate axes.
+    """
     raw = run_helper(
         [
             str(helper_bin),
@@ -216,6 +285,7 @@ def get_field_data(helper_bin: Path, snapshot: Path, ldomain: float, ny: int) ->
 
 
 def mirror_field(field_positive: np.ma.MaskedArray, r_positive: np.ndarray) -> tuple[np.ndarray, np.ma.MaskedArray]:
+    """Mirror a half-domain field and return the full radial coordinate vector."""
     field_rz_positive = np.ma.array(field_positive.T, copy=False)
     r_negative = -r_positive[::-1]
     field_negative = field_rz_positive[:, ::-1]
@@ -225,6 +295,7 @@ def mirror_field(field_positive: np.ma.MaskedArray, r_positive: np.ndarray) -> t
 
 
 def mask_field_to_side(field_rz: np.ma.MaskedArray, r_full: np.ndarray, side: str) -> np.ma.MaskedArray:
+    """Hide one side of a mirrored field so the two diagnostics can share one axis."""
     masked = np.ma.array(field_rz, copy=True)
     if side == "left":
         masked[:, r_full > 0.0] = np.ma.masked
@@ -236,12 +307,14 @@ def mask_field_to_side(field_rz: np.ma.MaskedArray, r_full: np.ndarray, side: st
 
 
 def grid_extent(r_full: np.ndarray, z: np.ndarray) -> list[float]:
+    """Compute `imshow()` extents from cell-centered radial and axial coordinates."""
     dr = float(np.median(np.diff(r_full))) if len(r_full) > 1 else 1.0
     dz = float(np.median(np.diff(z))) if len(z) > 1 else 1.0
     return [r_full[0] - 0.5 * dr, r_full[-1] + 0.5 * dr, z[0] - 0.5 * dz, z[-1] + 0.5 * dz]
 
 
 def auto_limits(field: np.ma.MaskedArray) -> tuple[float | None, float | None]:
+    """Estimate robust plotting limits from the 2nd and 98th percentiles."""
     values = field.compressed()
     if values.size == 0:
         return None, None
@@ -254,6 +327,7 @@ def auto_limits(field: np.ma.MaskedArray) -> tuple[float | None, float | None]:
 
 
 def add_colorbar(fig: plt.Figure, ax: plt.Axes, mappable, side: str, label: str) -> None:
+    """Attach a side-specific vertical colorbar outside the main movie frame."""
     left, bottom, width, height = ax.get_position().bounds
     cb_width = 0.025
     cb_gap = 0.035
@@ -270,6 +344,14 @@ def add_colorbar(fig: plt.Figure, ax: plt.Axes, mappable, side: str, label: str)
         colorbar.ax.yaxis.set_label_position("left")
 
 
+"""
+## Frame Rendering
+
+The functions below transform helper output into mirrored fields, paint the two
+diagnostics on one canvas, and optionally parallelize rendering across worker
+processes.
+"""
+
 def render_single_snapshot(
     frame_index: int,
     snapshot: Path,
@@ -285,6 +367,13 @@ def render_single_snapshot(
     d2_cmap: str,
     vel_cmap: str,
 ) -> Path:
+    """
+    Render one PNG frame for a single snapshot.
+
+    #### Returns
+
+    - `Path`: Path to the written `frame_*.png` image.
+    """
     configure_worker_environment(cache_root)
 
     fields = get_field_data(data_bin, snapshot, ldomain, ny)
@@ -366,6 +455,7 @@ def render_snapshots(
     d2_cmap: str,
     vel_cmap: str,
 ) -> list[Path]:
+    """Render all requested snapshots, either serially or in CPU-sized batches."""
     if not snapshots:
         return []
     if cpus <= 0:
@@ -429,14 +519,17 @@ def render_snapshots(
 
 
 def count_rendered_frames(output_dir: Path) -> int:
+    """Count PNG frames produced in `output_dir`."""
     return sum(1 for _ in output_dir.glob("frame_*.png"))
 
 
 def movie_output_path(case_dir: Path) -> Path:
+    """Return the default MP4 path `<case_dir>/<case_no>.mp4`."""
     return case_dir / f"{case_dir.name}.mp4"
 
 
 def choose_video_fps(frame_count: int, fps_override: int | None) -> int:
+    """Choose a frame rate that targets a short movie while honoring `--fps`."""
     if frame_count <= 0:
         raise ValueError("frame_count must be > 0")
     if fps_override is not None:
@@ -447,6 +540,7 @@ def choose_video_fps(frame_count: int, fps_override: int | None) -> int:
 
 
 def assemble_video(output_dir: Path, output_path: Path, fps: int) -> None:
+    """Encode rendered frames into an H.264 MP4 using `ffmpeg`."""
     if shutil.which("ffmpeg") is None:
         raise RuntimeError("ffmpeg is required unless --skip-video is used")
     cmd = [
@@ -471,7 +565,15 @@ def assemble_video(output_dir: Path, output_path: Path, fps: int) -> None:
     sp.run(cmd, check=True)
 
 
+"""
+## Command-Line Entry Point
+
+`main()` validates the CLI, renders frames, and optionally assembles the final
+movie once all PNGs are present.
+"""
+
 def main() -> None:
+    """Run the end-to-end rendering pipeline for one simulation case."""
     args = parse_args()
     if args.cpus <= 0:
         raise SystemExit("--cpus must be > 0")

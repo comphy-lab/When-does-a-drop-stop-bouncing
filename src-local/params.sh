@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 
+# Shared shell helpers for reading and editing `key=value` parameter files used
+# by `runSimulation.sh` and `runParameterSweep.sh`.
+
 get_param_value() {
+  # Return the first non-comment value associated with `key`.
   local file="$1"
   local key="$2"
 
@@ -28,6 +32,7 @@ get_param_value() {
 }
 
 set_param_in_file() {
+  # Replace `key` in place when present, otherwise append a new assignment.
   local file="$1"
   local key="$2"
   local value="$3"
@@ -48,6 +53,7 @@ set_param_in_file() {
 }
 
 require_param_value() {
+  # Read a required parameter and fail loudly when it is missing.
   local file="$1"
   local key="$2"
   local value

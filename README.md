@@ -90,8 +90,11 @@ without relative `../src-local/...` paths.
   case-aware wrappers around the `getEnergyAxi` and `getEpsForce` helper
   binaries.
 - Helper extractors such as `postProcess/getFacet.c`,
-  `postProcess/getDataDropOnly.c`, and `postProcess/getEnergyAxi.c` remain in
-  C for direct Basilisk snapshot access.
+  `postProcess/getData.c`, `postProcess/getEnergyAxi.c`, and
+  `postProcess/getEpsForce.c` remain in C for direct Basilisk snapshot access.
+- `postProcess/FinalManuscript_VelRel.py` is a legacy manuscript-era renderer
+  that depends on local helper binaries in the working directory and is kept
+  primarily for archival reproduction of older figure styles.
 
 Example frame render:
 
@@ -120,7 +123,6 @@ postProcess/ - offline analysis, extraction, and rendering tools
 ├── FinalManuscript_VelRel.py - legacy manuscript plotting script
 ├── VideoFullDomain.py - parallel whole-domain frame renderer
 ├── getData.c - snapshot field extractor
-├── getDataDropOnly.c - drop-only field extractor
 ├── getEnergyAxi.c - integral energy extractor
 ├── getEnergyScript.py - case-aware energy extraction wrapper
 ├── getEpsForce.c - wall-force and dissipation extractor
@@ -136,6 +138,14 @@ src-local/ - project-local headers and shared parameter helpers
 └── parse_params.h - low-level key=value parser for the solver
 sweep.params - sweep definition with SWEEP_* variables
 ```
+
+## Source Documentation
+
+The C solver and helper utilities use Markdown-first `/** ... */` documentation
+blocks so Basilisk source renders cleanly in the generated docs site. Python
+modules use a matching style with module docstrings, standalone Markdown string
+blocks, and function docstrings. If you update simulation or post-processing
+code, keep those source-level docs aligned with the implementation.
 
 ## Documentation Site
 

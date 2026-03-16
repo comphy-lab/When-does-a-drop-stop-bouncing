@@ -1,5 +1,22 @@
+/**
+# Typed Parameter Accessors
+
+Higher-level convenience wrappers built on top of [`parse_params.h`](parse_params.h).
+
+## Responsibilities
+
+- convert raw strings into typed values
+- provide fallback defaults for missing keys
+- emit consistent warnings for malformed entries
+- enforce simple constraints such as minimum integer bounds
+*/
 #include "parse_params.h"
 
+/**
+### param_string_equals_ignore_case()
+
+Performs a minimal ASCII-only case-insensitive equality test.
+*/
 static int param_string_equals_ignore_case (const char * lhs, const char * rhs)
 {
   if (!lhs || !rhs)
@@ -20,6 +37,12 @@ static int param_string_equals_ignore_case (const char * lhs, const char * rhs)
   return (*lhs == '\0' && *rhs == '\0');
 }
 
+/**
+### param_double()
+
+Returns the floating-point value associated with `key`, or `fallback` when the
+entry is missing or malformed.
+*/
 static double param_double (const char * key, double fallback)
 {
   const char * raw = params_get_raw(key);
@@ -37,6 +60,12 @@ static double param_double (const char * key, double fallback)
   return value;
 }
 
+/**
+### param_int()
+
+Returns the integer value associated with `key`, or `fallback` when the entry
+is missing or malformed.
+*/
 static int param_int (const char * key, int fallback)
 {
   const char * raw = params_get_raw(key);
@@ -54,6 +83,11 @@ static int param_int (const char * key, int fallback)
   return (int) value;
 }
 
+/**
+### param_bool()
+
+Parses common textual boolean forms such as `true`, `false`, `yes`, and `no`.
+*/
 static int param_bool (const char * key, int fallback)
 {
   const char * raw = params_get_raw(key);
@@ -77,12 +111,23 @@ static int param_bool (const char * key, int fallback)
   return fallback;
 }
 
+/**
+### param_string()
+
+Returns the stored string value for `key`, or `fallback` when the key is
+absent or empty.
+*/
 static const char * param_string (const char * key, const char * fallback)
 {
   const char * raw = params_get_raw(key);
   return (raw && raw[0]) ? raw : fallback;
 }
 
+/**
+### param_int_min()
+
+Returns an integer parameter while enforcing a lower bound.
+*/
 static int param_int_min (const char * key, int fallback, int min_value)
 {
   int value = param_int(key, fallback);
