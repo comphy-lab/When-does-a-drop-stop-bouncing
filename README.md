@@ -9,7 +9,7 @@ analysis tools live in `postProcess/`.
 ## Requirements
 
 - Basilisk with `qcc`
-- Python 3 for post-processing scripts
+- Python 3 with `numpy` and `matplotlib` for post-processing scripts
 - `ffmpeg` only if video assembly is needed
 
 ## Quick Start
@@ -74,10 +74,16 @@ without relative `../src-local/...` paths.
 ## Post-Processing
 
 - `postProcess/VideoFullDomain.py` renders deterministic `frame_%06d.png`
-  outputs from `simulationCases/<CaseNo>/intermediate/`, supports
-  batched parallel rendering with `--cpus` / `--CPUs`, and writes a
-  case-named MP4 such as `simulationCases/1000/1000.mp4` after counting the
-  rendered frames in the output directory.
+  outputs from `simulationCases/<CaseNo>/intermediate/`, sampling
+  `postProcess/getData.c` on the positive-r half-domain and mirroring it so
+  `D2` is shown on the left half and `|\mathbf{u}|` on the right half, with
+  the interface from `postProcess/getFacet.c` overlaid on both sides.
+  By default the left `D2` plot uses `hot_r` on `[-1, 2]` and the right
+  velocity plot uses `Blues` with white at zero velocity.
+  It supports batched parallel rendering with `--cpus` / `--CPUs`, clears old
+  `frame_*.png` outputs before rendering, and writes a case-named MP4 such as
+  `simulationCases/1000/1000.mp4` after counting the rendered frames in the
+  output directory.
   The default video fps is chosen to target a 10 s movie subject to a
   minimum of 30 fps; `--fps` can override this with any value `>= 30`.
 - `postProcess/getEnergyScript.py` and `postProcess/getEpsNForce.py` are

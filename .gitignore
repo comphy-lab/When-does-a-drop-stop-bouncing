@@ -7,6 +7,10 @@ basilisk/
 simulationCases/[0-9]*/
 postProcess/__pycache__/
 postProcess/.video-cache/
+postProcess/getFacet
+postProcess/getData
+postProcess/*-cpp.c
+*.qcc
 *.o
 *.a
 *.out
